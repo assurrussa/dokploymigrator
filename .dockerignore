@@ -1,0 +1,15 @@
+.cache
+.env
+.git
+.idea
+.vscode
+.zed
+build
+state
+tmp
+dokploy-migrator
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+plan.json
+.DS_Store

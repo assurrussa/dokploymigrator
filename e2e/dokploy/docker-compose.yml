@@ -1,0 +1,50 @@
+services:
+  dokploy-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: dokploy
+      POSTGRES_DB: dokploy
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    ports:
+      - "127.0.0.1:${E2E_POSTGRES_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dokploy -d dokploy"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  dokploy-redis:
+    image: redis:7
+
+  dokploy:
+    image: "dokploy/dokploy:${DOKPLOY_VERSION:-latest}"
+    depends_on:
+      dokploy-postgres:
+        condition: service_healthy
+      dokploy-redis:
+        condition: service_started
+    environment:
+      ADVERTISE_ADDR: 127.0.0.1
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      BETTER_AUTH_SECRET_FILE: /run/secrets/dokploy_auth_secret
+      RELEASE_TAG: latest
+    secrets:
+      - postgres_password
+      - dokploy_auth_secret
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - "${E2E_DOKPLOY_ETC:-./tmp/e2e-dokploy-db/etc-dokploy}:/etc/dokploy"
+      - dokploy-docker:/root/.docker
+    ports:
+      - "127.0.0.1:${E2E_DOKPLOY_PORT:-53000}:3000"
+
+secrets:
+  postgres_password:
+    file: ${E2E_SECRET_DIR:-./tmp/e2e-dokploy-db/secrets}/postgres_password
+  dokploy_auth_secret:
+    file: ${E2E_SECRET_DIR:-./tmp/e2e-dokploy-db/secrets}/dokploy_auth_secret
+
+volumes:
+  dokploy-docker:

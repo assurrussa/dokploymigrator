@@ -1,0 +1,9 @@
+.idea
+.zed
+.vscode
+/dokploy-migrator
+tmp/
+/*.sqlite
+/*.sqlite-shm
+/*.sqlite-wal
+/plan.json

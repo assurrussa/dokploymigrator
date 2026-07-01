@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dokploy Migrator"
+  short_description: "Operate this Dokploy migration repo safely."
+  default_prompt: "Use $dokploy-migrator for safe Dokploy Migrator repo work: schema retargeting, Compose deployment, schemaHash approval, and verification."

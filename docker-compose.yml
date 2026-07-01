@@ -1,0 +1,42 @@
+services:
+  dokploy-migrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dokploy-migrator:local
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MIGRATOR_ADDR: ":8080"
+      MIGRATOR_STATE_PATH: "/data/dokploy-migrator.sqlite"
+      MIGRATOR_BASIC_USER: "${MIGRATOR_BASIC_USER:-admin}"
+      MIGRATOR_BASIC_PASSWORD: "${MIGRATOR_BASIC_PASSWORD:-}"
+      MIGRATOR_ADMIN_TOKEN: "${MIGRATOR_ADMIN_TOKEN:-}"
+      MIGRATOR_DEAD_AFTER: "${MIGRATOR_DEAD_AFTER:-10m}"
+      DOKPLOY_POSTGRES_DSN: "${DOKPLOY_POSTGRES_DSN:-}"
+      DOKPLOY_API_BASE_URL: "${DOKPLOY_API_BASE_URL:-}"
+      DOKPLOY_API_TOKEN: "${DOKPLOY_API_TOKEN:-}"
+      DOKPLOY_HEALTH_PATH: "${DOKPLOY_HEALTH_PATH:-/health}"
+      DOKPLOY_DEPLOY_PATH: "${DOKPLOY_DEPLOY_PATH:-}"
+      MIGRATOR_SCHEMA_ALLOWLIST: "${MIGRATOR_SCHEMA_ALLOWLIST:-}"
+    volumes:
+      - dokploy-migrator-data:/data
+    ports:
+      - "${MIGRATOR_HTTP_PORT:-8080}:8080"
+    expose:
+      - "8080"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS -u \"$$MIGRATOR_BASIC_USER:$$MIGRATOR_BASIC_PASSWORD\" http://127.0.0.1:8080/api/health >/dev/null || exit 1",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  dokploy-migrator-data:

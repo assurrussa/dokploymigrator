@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dokploy Migrator</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <main>
+      <header class="toolbar">
+        <div>
+          <p class="eyebrow" data-i18n="eyebrow">Инструмент восстановления Dokploy</p>
+          <h1>Dokploy Migrator</h1>
+          <p class="lead" data-i18n="lead">Переносит привязки проектов с мертвого или локального Dokploy-сервера на рабочий через безопасный dry-run.</p>
+        </div>
+        <div class="toolbar-actions">
+          <div class="lang-switch" aria-label="Language">
+            <button id="lang-ru" class="secondary compact" type="button">RU</button>
+            <button id="lang-en" class="secondary compact" type="button">EN</button>
+          </div>
+          <button id="refresh" class="secondary" type="button" data-i18n="refresh">Обновить</button>
+        </div>
+      </header>
+
+      <section class="notice">
+        <strong data-i18n="scopeTitle">Текущий scope:</strong>
+        <span data-i18n="scopeText">готов перенос метаданных в БД Dokploy. Поиск S3-бэкапов и SSH-команды восстановления есть как низкоуровневые примитивы, но полный мастер восстановления данных еще не подключен к этой странице.</span>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="step" data-i18n="stepScan">Шаг 0</p>
+            <h2 data-i18n="serversTitle">Серверы Dokploy</h2>
+            <p data-i18n="serversHint">Скан читает таблицу серверов и показывает, сколько переносимых ресурсов сейчас привязано к каждому серверу, включая основной локальный Dokploy с serverId NULL.</p>
+          </div>
+          <button id="scan-servers" class="secondary" type="button" data-i18n="scanServers">Сканировать серверы</button>
+        </div>
+
+        <div id="servers-summary" class="summary empty" data-i18n="serversEmpty">Серверы еще не сканировались.</div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th data-i18n="serverColumnName">Сервер</th>
+                <th data-i18n="serverColumnStatus">Статус</th>
+                <th data-i18n="serverColumnResources">Ресурсы</th>
+                <th data-i18n="serverColumnLastSeen">Последняя активность</th>
+                <th data-i18n="serverColumnActions">Действия</th>
+              </tr>
+            </thead>
+            <tbody id="servers-body">
+              <tr>
+                <td colspan="5" class="empty-cell" data-i18n="serversNotLoaded">Нажмите “Сканировать серверы”.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="step" data-i18n="stepPlan">Шаг 1</p>
+            <h2 data-i18n="planTitle">Собрать dry-run план</h2>
+            <p data-i18n="planHint">Dry-run только читает БД и показывает точные строки, которые будут изменены при apply.</p>
+          </div>
+        </div>
+
+        <form id="plan-form">
+          <label>
+            <span data-i18n="sourceServer">Source server ID</span>
+            <input name="sourceServerId" id="source-server-id" list="source-server-options" autocomplete="off" required data-i18n-placeholder="sourcePlaceholder" placeholder="serverId или __dokploy_local__">
+            <datalist id="source-server-options"></datalist>
+            <small data-i18n="sourceHelp">Сервер или основной локальный Dokploy, к которому сейчас привязаны приложения, compose и базы.</small>
+          </label>
+
+          <label>
+            <span data-i18n="targetServer">Target server ID</span>
+            <input name="targetServerId" id="target-server-id" list="target-server-options" autocomplete="off" required data-i18n-placeholder="targetPlaceholder" placeholder="serverId рабочего сервера">
+            <datalist id="target-server-options"></datalist>
+            <small data-i18n="targetHelp">Живой сервер, на который надо перепривязать выбранные ресурсы.</small>
+          </label>
+
+          <label>
+            <span data-i18n="modeLabel">Режим</span>
+            <input name="mode" type="hidden" value="dead_recovery">
+            <input value="dead_recovery" disabled>
+            <small data-i18n="modeHelp">Это основной production-режим для мертвого сервера. Плановый перенос зарезервирован для будущей логики и пока скрыт из UI.</small>
+          </label>
+
+          <label>
+            <span data-i18n="adminToken">Admin token</span>
+            <input name="adminToken" id="admin-token" type="password" autocomplete="current-password" required placeholder="MIGRATOR_ADMIN_TOKEN">
+            <small data-i18n="adminHelp">Нужен для создания dry-run и destructive apply-запросов.</small>
+          </label>
+
+          <button class="primary wide" type="submit" data-i18n="buildDryRun">Построить dry-run</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="step" data-i18n="stepReview">Шаг 2</p>
+            <h2 data-i18n="reviewTitle">Проверить план</h2>
+            <p data-i18n="reviewHint">Сверьте список ресурсов, старый serverId, новый serverId и schemaHash перед apply.</p>
+          </div>
+          <span id="plan-status" class="status muted" data-i18n="statusNoPlan">Плана нет</span>
+        </div>
+
+        <div id="plan-summary" class="summary empty" data-i18n="planSummaryEmpty">Постройте dry-run, чтобы увидеть summary переноса.</div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th class="select-column">
+                  <input id="resource-select-all" type="checkbox" aria-label="Выбрать все ресурсы">
+                </th>
+                <th data-i18n="resourceTable">Таблица</th>
+                <th data-i18n="resourceName">Имя</th>
+                <th>ID</th>
+                <th data-i18n="resourceIDColumn">ID-колонка</th>
+                <th data-i18n="resourceServerChange">Смена сервера</th>
+              </tr>
+            </thead>
+            <tbody id="resources-body">
+              <tr>
+                <td colspan="6" class="empty-cell" data-i18n="resourcesEmpty">Ресурсы не загружены.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <details>
+          <summary data-i18n="rawDryRun">Raw JSON dry-run</summary>
+          <pre id="output">No plan yet.</pre>
+        </details>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="step" data-i18n="stepApply">Шаг 3</p>
+            <h2 data-i18n="applyTitle">Подтвердить и применить</h2>
+            <p data-i18n="applyHint">Apply включается только после dry-run, совпадающего schemaHash и точного текста APPLY.</p>
+          </div>
+          <span id="apply-status" class="status muted" data-i18n="statusWaiting">Ожидание</span>
+        </div>
+
+        <form id="apply-form">
+          <label>
+            <span data-i18n="schemaApproval">Подтверждение schemaHash</span>
+            <input name="schemaHashApproval" id="schema-hash-approval" autocomplete="off" data-i18n-placeholder="schemaPlaceholder" placeholder="вставьте plan.schemaHash или оставьте пустым для MIGRATOR_SCHEMA_ALLOWLIST">
+            <small data-i18n="schemaHelp">Если поле заполнено, hash должен совпасть с dry-run и текущей схемой БД. Если пустое, сервер использует env allowlist.</small>
+          </label>
+
+          <label>
+            <span data-i18n="confirmation">Текст подтверждения</span>
+            <input name="confirmationText" id="confirmation-text" autocomplete="off" data-i18n-placeholder="confirmationPlaceholder" placeholder="Введите APPLY">
+            <small data-i18n="confirmationHelp">Введите ровно <code>APPLY</code>, чтобы разблокировать запись в БД.</small>
+          </label>
+
+          <button id="apply-button" class="danger wide" type="submit" disabled data-i18n="applyButton">Применить перепривязку</button>
+        </form>
+
+        <p id="apply-help" class="help" data-i18n="applyHelpNoPlan">Сначала постройте dry-run план.</p>
+
+        <details open>
+          <summary data-i18n="applyResult">Результат apply</summary>
+          <pre id="apply-output">No apply yet.</pre>
+        </details>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <p class="step" data-i18n="stepAudit">Шаг 4</p>
+            <h2 data-i18n="jobsTitle">История jobs</h2>
+            <p data-i18n="jobsHint">История dry-run, apply и rollback jobs из локальной SQLite БД Migrator. Последние 50 записей защищены от удаления.</p>
+          </div>
+        </div>
+        <div id="jobs" class="jobs-list">Loading...</div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
