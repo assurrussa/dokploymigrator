@@ -32,6 +32,7 @@ var retargetTables = []string{
 
 const (
 	applicationIDColumn = "applicationId"
+	composeIDColumn     = "composeId"
 	mongoIDColumn       = "mongoId"
 	lastSeenAtColumn    = "lastSeenAt"
 	serverTable         = "server"
@@ -184,14 +185,7 @@ func (a *Adapter) ListServers(ctx context.Context, deadAfter time.Duration) ([]m
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate Dokploy servers: %w", err)
 	}
-	if localCount := resourceCounts[model.LocalServerID]; localCount > 0 && !serverListContains(servers, model.LocalServerID) {
-		servers = append(servers, model.Server{
-			ID:            model.LocalServerID,
-			Name:          model.LocalServerName,
-			Status:        model.ServerUnknown,
-			ResourceCount: localCount,
-		})
-	}
+	servers = ensureLocalServer(servers, resourceCounts[model.LocalServerID])
 	sort.SliceStable(servers, func(i, j int) bool {
 		if servers[i].Status != servers[j].Status {
 			return serverStatusRank(servers[i].Status) < serverStatusRank(servers[j].Status)
@@ -410,13 +404,23 @@ func (a *Adapter) ApplyRetargetPlan(
 	return nil
 }
 
-func serverListContains(servers []model.Server, id string) bool {
-	for _, server := range servers {
-		if server.ID == id {
-			return true
+func ensureLocalServer(servers []model.Server, resourceCount int) []model.Server {
+	for i := range servers {
+		if servers[i].ID != model.LocalServerID {
+			continue
 		}
+		servers[i].Name = model.LocalServerName
+		servers[i].Status = model.ServerUnknown
+		servers[i].LastSeenAt = nil
+		servers[i].ResourceCount = resourceCount
+		return servers
 	}
-	return false
+	return append(servers, model.Server{
+		ID:            model.LocalServerID,
+		Name:          model.LocalServerName,
+		Status:        model.ServerUnknown,
+		ResourceCount: resourceCount,
+	})
 }
 
 func retargetSQL(row model.PlanRow, idColumn string) (string, []any) {
@@ -702,7 +706,7 @@ func idColumnCandidates(table string) []string {
 	case string(model.ResourceApplication):
 		candidates = append([]string{applicationIDColumn}, candidates...)
 	case string(model.ResourceCompose):
-		candidates = append([]string{"composeId"}, candidates...)
+		candidates = append([]string{composeIDColumn}, candidates...)
 	case string(model.ResourcePostgres):
 		candidates = append([]string{"postgresId"}, candidates...)
 	case string(model.ResourceMySQL):

@@ -79,9 +79,9 @@
 
           <label>
             <span data-i18n="targetServer">Target server ID</span>
-            <input name="targetServerId" id="target-server-id" list="target-server-options" autocomplete="off" required data-i18n-placeholder="targetPlaceholder" placeholder="serverId рабочего сервера">
+            <input name="targetServerId" id="target-server-id" list="target-server-options" autocomplete="off" required data-i18n-placeholder="targetPlaceholder" placeholder="serverId или __dokploy_local__">
             <datalist id="target-server-options"></datalist>
-            <small data-i18n="targetHelp">Живой сервер, на который надо перепривязать выбранные ресурсы.</small>
+            <small data-i18n="targetHelp">Рабочий удаленный сервер или основной локальный Dokploy с serverId NULL.</small>
           </label>
 
           <label>

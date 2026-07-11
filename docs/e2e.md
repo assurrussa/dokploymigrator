@@ -53,6 +53,9 @@ The Dokploy container is used to create/migrate the real Dokploy PostgreSQL sche
 - At least application, compose, postgres, and redis resources are discovered.
 - Apply moves those rows to the target server.
 - Rollback moves those rows back to the source server.
+- A second flow moves remote-server rows to `__dokploy_local__`, verifies
+  `serverId IS NULL`, and rolls them back to the original remote server.
+- The existing local-source flow still verifies `__dokploy_local__ -> remote -> rollback`.
 - CLI apply still requires explicit `-confirm APPLY`.
 - CLI apply and rollback accept explicit `-schema-hash-approval`; the env allowlist remains only a fallback path.
 

@@ -412,6 +412,30 @@ func TestPlanTrimsSourceAndTargetBeforeCreatingJob(t *testing.T) {
 	}
 }
 
+func TestPlanAcceptsLocalServerTarget(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	localPlan := testPlan()
+	localPlan.TargetServerID = model.LocalServerID
+	localPlan.Rows[0].NewServerID = model.LocalServerID
+	fakeDB := &fakeDBAdapter{plan: localPlan}
+	manager := NewManager(store, fakeDB, nil)
+
+	job, plan, err := manager.Plan(ctx, testSourceServerID, model.LocalServerID, "")
+	if err != nil {
+		t.Fatalf("Plan() error = %v", err)
+	}
+	if job.TargetServerID != model.LocalServerID || plan.TargetServerID != model.LocalServerID {
+		t.Fatalf("job/plan target = %q/%q, want %q", job.TargetServerID, plan.TargetServerID, model.LocalServerID)
+	}
+	if len(plan.Rows) != 1 || plan.Rows[0].NewServerID != model.LocalServerID {
+		t.Fatalf("plan rows = %+v, want local server target", plan.Rows)
+	}
+	if fakeDB.planTargetServerID != model.LocalServerID {
+		t.Fatalf("adapter target = %q, want %q", fakeDB.planTargetServerID, model.LocalServerID)
+	}
+}
+
 func testPlan() model.MigrationPlan {
 	return model.MigrationPlan{
 		ID:             testPlanID,

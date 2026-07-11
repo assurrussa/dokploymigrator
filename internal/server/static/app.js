@@ -29,7 +29,7 @@ const resourceSelectAll = document.querySelector("#resource-select-all");
 const messages = {
   ru: {
     eyebrow: "Инструмент восстановления Dokploy",
-    lead: "Переносит привязки проектов с мертвого или локального Dokploy-сервера на рабочий через безопасный dry-run.",
+    lead: "Безопасно переносит привязки проектов между удаленными серверами и основным локальным Dokploy через dry-run.",
     refresh: "Обновить",
     scopeTitle: "Текущий scope:",
     scopeText: "готов перенос метаданных в БД Dokploy. Поиск S3-бэкапов и SSH-команды восстановления есть как низкоуровневые примитивы, но полный мастер восстановления данных еще не подключен к этой странице.",
@@ -46,7 +46,7 @@ const messages = {
     serverColumnActions: "Действия",
     scanRunning: "Сканирование серверов...",
     scanFailed: "Скан серверов не удался: {error}",
-    scanLoaded: "Найдено источников: {count}. Offline/unknown показаны первыми.",
+    scanLoaded: "Найдено серверов: {count}. Offline/unknown показаны первыми.",
     scanNone: "Серверы не найдены.",
     localServerLabel: "Основной локальный Dokploy (serverId NULL)",
     useSource: "Источник",
@@ -61,10 +61,10 @@ const messages = {
     planHint: "Dry-run только читает БД и показывает точные строки, которые будут изменены при apply.",
     sourceServer: "Source server ID",
     sourcePlaceholder: "serverId или __dokploy_local__",
-    sourceHelp: "Сервер или основной локальный Dokploy, к которому сейчас привязаны приложения, compose и базы.",
+    sourceHelp: "Сервер или основной локальный Dokploy, к которому сейчас привязаны приложения, compose, базы и домены.",
     targetServer: "Target server ID",
-    targetPlaceholder: "serverId рабочего сервера",
-    targetHelp: "Живой сервер, на который надо перепривязать выбранные ресурсы.",
+    targetPlaceholder: "serverId или __dokploy_local__",
+    targetHelp: "Рабочий удаленный сервер или основной локальный Dokploy с serverId NULL.",
     modeLabel: "Режим",
     modeHelp: "Это основной production-режим для мертвого сервера. Плановый перенос зарезервирован для будущей логики и пока скрыт из UI.",
     adminToken: "Admin token",
@@ -139,7 +139,7 @@ const messages = {
   },
   en: {
     eyebrow: "Dokploy recovery tool",
-    lead: "Moves project metadata from a dead or local Dokploy server to a healthy server through a safe dry-run.",
+    lead: "Safely retargets project metadata between remote servers and the main local Dokploy server through a dry-run.",
     refresh: "Refresh",
     scopeTitle: "Current scope:",
     scopeText: "Dokploy database metadata retargeting is implemented. S3 backup discovery and SSH restore commands exist as low-level primitives, but the full data restore wizard is not wired into this page yet.",
@@ -156,7 +156,7 @@ const messages = {
     serverColumnActions: "Actions",
     scanRunning: "Scanning servers...",
     scanFailed: "Server scan failed: {error}",
-    scanLoaded: "Sources found: {count}. Offline/unknown sources are shown first.",
+    scanLoaded: "Servers found: {count}. Offline/unknown servers are shown first.",
     scanNone: "No servers found.",
     localServerLabel: "Main local Dokploy",
     useSource: "Source",
@@ -171,10 +171,10 @@ const messages = {
     planHint: "Dry-run only reads the database and shows the exact rows that apply would update.",
     sourceServer: "Source server ID",
     sourcePlaceholder: "serverId or __dokploy_local__",
-    sourceHelp: "The server or main local Dokploy source currently attached to applications, compose stacks, and databases.",
+    sourceHelp: "The server or main local Dokploy source currently attached to applications, compose stacks, databases, and domains.",
     targetServer: "Target server ID",
-    targetPlaceholder: "healthy serverId",
-    targetHelp: "The healthy server that should own the selected resources.",
+    targetPlaceholder: "serverId or __dokploy_local__",
+    targetHelp: "The healthy remote server or main local Dokploy server with serverId NULL that should own the selected resources.",
     modeLabel: "Mode",
     modeHelp: "This is the production mode for a dead server. Planned relocation is reserved for future behavior and is hidden from the UI for now.",
     adminToken: "Admin token",
@@ -451,10 +451,7 @@ function renderServers(servers) {
   const targetOptions = document.querySelector("#target-server-options");
 
   sourceOptions.innerHTML = scannedServers.map(serverOption).join("");
-  targetOptions.innerHTML = scannedServers
-    .filter((server) => server.id !== LOCAL_SERVER_ID)
-    .map(serverOption)
-    .join("");
+  targetOptions.innerHTML = scannedServers.map(serverOption).join("");
 
   if (!scannedServers.length) {
     serversSummary.textContent = t("serversEmpty");
@@ -478,9 +475,7 @@ function renderServers(servers) {
 
   serversBody.innerHTML = scannedServers.map((server) => {
     const name = serverName(server);
-    const targetButton = server.id === LOCAL_SERVER_ID
-      ? ""
-      : `<button class="secondary compact" type="button" data-server-target="${escapeHTML(server.id)}">${escapeHTML(t("useTarget"))}</button>`;
+    const targetButton = `<button class="secondary compact" type="button" data-server-target="${escapeHTML(server.id)}">${escapeHTML(t("useTarget"))}</button>`;
     return `
     <tr>
       <td>

@@ -1,6 +1,6 @@
 # Dokploy Migrator
 
-Dokploy Migrator is a small recovery tool for Dokploy operators. It helps move Applications, Compose stacks, databases, and domains away from a dead Dokploy server by retargeting Dokploy database metadata after a reviewed dry-run.
+Dokploy Migrator is a small recovery tool for Dokploy operators. It helps move Applications, Compose stacks, databases, and domains away from a dead Dokploy server or back to the main local Dokploy server by retargeting Dokploy database metadata after a reviewed dry-run.
 
 The app is designed to run as a normal Docker Compose application in Dokploy.
 
@@ -20,9 +20,9 @@ In Docker Swarm environments, treat this as a database-level recovery helper onl
 
 ## What It Does Today
 
-- Scans Dokploy servers from the connected PostgreSQL database.
+- Scans Dokploy servers from the connected PostgreSQL database and always exposes the built-in local Dokploy server, even when it currently owns no resources.
 - Shows server IDs, best-effort status, last activity, and attached resource counts.
-- Builds a dry-run migration plan for `source serverId -> target serverId`, including the built-in local Dokploy source where resources have `serverId = NULL`.
+- Builds a dry-run migration plan for `source serverId -> target serverId`, including the built-in local Dokploy server as either source or target through the `__dokploy_local__` marker (`serverId = NULL`).
 - Applies metadata retargeting only after explicit operator confirmation.
 - Keeps paginated job history and reports in a separate SQLite database; the latest 50 jobs are protected from deletion.
 - Provides rollback through the API/CLI for deliberate operator use with the same schema approval boundary.
@@ -80,7 +80,7 @@ Expected:
 
 1. Open the Migrator URL and log in with Basic Auth.
 2. Click `Сканировать серверы` / `Scan servers`.
-3. Pick the dead source server, or pick `__dokploy_local__` for resources that live on the main local Dokploy server, and choose the healthy target server.
+3. Pick the dead source server and the destination. Choose `__dokploy_local__` as either side when resources currently live on, or should move to, the main local Dokploy server.
 4. Build a dry-run.
 5. Review the resource table, uncheck any resources that should not move in this apply, and inspect raw JSON if needed.
 6. Paste `plan.schemaHash`, or leave it empty only if `MIGRATOR_SCHEMA_ALLOWLIST` already contains that hash.
@@ -88,7 +88,7 @@ Expected:
 8. Apply metadata retargeting for the selected resources.
 9. Verify rows in Dokploy PostgreSQL and redeploy affected resources in Dokploy.
 
-When resources belong to the built-in local Dokploy server, the UI exposes them through the synthetic source ID `__dokploy_local__`. This marker means `serverId IS NULL` in Dokploy PostgreSQL; it is not a real row in the `server` table.
+The UI exposes the built-in local Dokploy server through the synthetic ID `__dokploy_local__`, even when it currently owns zero resources. As a source it means `serverId IS NULL`; as a target it makes apply set `serverId = NULL`. It is not a real row in the `server` table.
 
 The UI is Russian by default and includes an English switch.
 
