@@ -9,7 +9,7 @@ Dokploy Migrator changes Dokploy PostgreSQL metadata. It does not move Docker ru
 Best fit:
 
 - Single-host recovery paths and resources that do not depend on preserving existing Swarm service/task state.
-- Applications, Compose stacks, and Dokploy-managed databases whose `serverId` needs to move to a healthy target server.
+- Applications, Compose stacks, Dokploy-managed databases, and domains whose `serverId` needs to move to a healthy remote server or back to the main local Dokploy server.
 - Emergency recovery where a reviewed dry-run, explicit `schemaHash` approval, and post-apply verification are acceptable.
 
 Use extra caution with Docker Swarm. Swarm keeps its own manager/service/task desired state, routing, networks, and volumes. Migrator does not update that state, so a Swarm-backed installation needs manual checks such as `docker service ls`, `docker service ps`, volume/network inspection, and Dokploy redeploy verification after the metadata change.
@@ -62,9 +62,10 @@ docker run --rm --network dokploy-network \
   -c 'select "serverId", "name" from "server" order by "name";'
 ```
 
-The main local Dokploy server is not always stored as a row in `server`.
-Resources on that source are represented by `serverId IS NULL`; the Web UI
-shows them as synthetic source ID `__dokploy_local__`.
+The main local Dokploy server is not always stored as a row in `server`. The Web
+UI always shows it through the synthetic ID `__dokploy_local__`, including when
+it owns zero resources. As a source this marker selects rows where `serverId IS
+NULL`; as a target it makes apply set `serverId = NULL`.
 
 Count movable resources by explicit server or local source:
 
@@ -96,7 +97,7 @@ remove those lines from the manual query.
 1. Deploy Dokploy Migrator with Basic Auth, admin token, and `DOKPLOY_POSTGRES_DSN`.
 2. Open the UI.
 3. Scan servers.
-4. Select source and target server IDs. Use `__dokploy_local__` as the source for resources whose current `serverId` is `NULL`.
+4. Select source and target server IDs. Use `__dokploy_local__` as the source for resources whose current `serverId` is `NULL`, or as the target to move resources onto the main local Dokploy server.
 5. Build dry-run.
 6. Review rows, uncheck resources that should stay on the source server for this apply, and verify `schemaHash`.
 7. Paste `schemaHash` or configure `MIGRATOR_SCHEMA_ALLOWLIST`.
@@ -171,6 +172,11 @@ select count(*) from (
 
 If tables such as `mysql` or `mongo` do not exist in your Dokploy version, remove those lines from the manual query. The Migrator adapter automatically skips missing supported tables.
 
+If the target was the main local Dokploy server, verify the selected resource
+rows with `serverId IS NULL`. The dry-run and stored report retain
+`targetServerId: "__dokploy_local__"` as the operator-facing representation;
+the PostgreSQL write uses `NULL`.
+
 ## Job History
 
 The UI shows job history in pages of 50 records. The newest 50 jobs are protected from deletion so the latest dry-run/apply/rollback audit window stays available.
@@ -193,6 +199,10 @@ curl -fsS -X DELETE \
 ```
 
 ## API Apply Payload
+
+For a dry-run that targets the main local Dokploy server, send
+`"targetServerId": "__dokploy_local__"` to `POST /api/plan`. The response keeps
+that marker in `plan.targetServerId` and each row's `newServerId`.
 
 ```json
 {

@@ -197,6 +197,46 @@ func TestScanResourceCountsMapsNullServerIDToLocalServer(t *testing.T) {
 	}
 }
 
+func TestEnsureLocalServerAddsZeroCountServer(t *testing.T) {
+	servers := ensureLocalServer([]model.Server{{
+		ID:            "server-1",
+		Name:          "Server 1",
+		Status:        model.ServerOnline,
+		ResourceCount: 3,
+	}}, 0)
+
+	if len(servers) != 2 {
+		t.Fatalf("servers length = %d, want 2", len(servers))
+	}
+	local := servers[1]
+	if local.ID != model.LocalServerID || local.Name != model.LocalServerName {
+		t.Fatalf("local server = %+v, want ID %q and name %q", local, model.LocalServerID, model.LocalServerName)
+	}
+	if local.Status != model.ServerUnknown || local.ResourceCount != 0 || local.LastSeenAt != nil {
+		t.Fatalf("local server = %+v, want unknown status, zero resources, and no last seen", local)
+	}
+}
+
+func TestEnsureLocalServerNormalizesExistingServerWithoutDuplicate(t *testing.T) {
+	seen := time.Now().UTC()
+	servers := ensureLocalServer([]model.Server{{
+		ID:            model.LocalServerID,
+		Name:          "unexpected",
+		Status:        model.ServerOnline,
+		LastSeenAt:    &seen,
+		ResourceCount: 1,
+	}}, 7)
+
+	if len(servers) != 1 {
+		t.Fatalf("servers length = %d, want 1", len(servers))
+	}
+	local := servers[0]
+	if local.Name != model.LocalServerName || local.Status != model.ServerUnknown ||
+		local.ResourceCount != 7 || local.LastSeenAt != nil {
+		t.Fatalf("local server = %+v, want normalized synthetic local server", local)
+	}
+}
+
 func TestValidateRetargetPlanForWriteRequiresConsistentRows(t *testing.T) {
 	plan := model.MigrationPlan{
 		ID:             testPlanID,
@@ -243,10 +283,30 @@ func TestValidateRetargetPlanForWriteAcceptsLocalServerSource(t *testing.T) {
 		SchemaHash:     testSchemaHash,
 		Rows: []model.PlanRow{{
 			Table:       string(model.ResourceCompose),
-			IDColumn:    "composeId",
+			IDColumn:    composeIDColumn,
 			ID:          testComposeID,
 			OldServerID: model.LocalServerID,
 			NewServerID: testTargetServerID,
+		}},
+	}
+
+	if err := validateRetargetPlanForWrite(plan); err != nil {
+		t.Fatalf("validateRetargetPlanForWrite() error = %v", err)
+	}
+}
+
+func TestValidateRetargetPlanForWriteAcceptsLocalServerTarget(t *testing.T) {
+	plan := model.MigrationPlan{
+		ID:             testPlanID,
+		SourceServerID: testSourceServerID,
+		TargetServerID: model.LocalServerID,
+		SchemaHash:     testSchemaHash,
+		Rows: []model.PlanRow{{
+			Table:       string(model.ResourceCompose),
+			IDColumn:    composeIDColumn,
+			ID:          testComposeID,
+			OldServerID: testSourceServerID,
+			NewServerID: model.LocalServerID,
 		}},
 	}
 
@@ -261,7 +321,7 @@ func TestRetargetSQLFromLocalServerUsesNullPredicate(t *testing.T) {
 		ID:          testComposeID,
 		OldServerID: model.LocalServerID,
 		NewServerID: testTargetServerID,
-	}, "composeId")
+	}, composeIDColumn)
 
 	if !strings.Contains(query, `SET "serverId" = $1`) || !strings.Contains(query, `"serverId" IS NULL`) {
 		t.Fatalf("retargetSQL() query = %s, want NULL old-server predicate", query)
@@ -277,7 +337,7 @@ func TestRetargetSQLToLocalServerSetsServerIDNull(t *testing.T) {
 		ID:          testComposeID,
 		OldServerID: testTargetServerID,
 		NewServerID: model.LocalServerID,
-	}, "composeId")
+	}, composeIDColumn)
 
 	if !strings.Contains(query, `SET "serverId" = NULL`) || !strings.Contains(query, `"serverId" = $2`) {
 		t.Fatalf("retargetSQL() query = %s, want NULL assignment and old-server guard", query)

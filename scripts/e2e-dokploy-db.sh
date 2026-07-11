@@ -15,6 +15,7 @@ SOURCE_SERVER_ID="${E2E_SOURCE_SERVER_ID:-e2e-dead-server}"
 TARGET_SERVER_ID="${E2E_TARGET_SERVER_ID:-e2e-live-server}"
 PLAN_FILE="$E2E_WORK_DIR/plan.json"
 LOCAL_SERVER_ID="${E2E_LOCAL_SERVER_ID:-__dokploy_local__}"
+REMOTE_TO_LOCAL_PLAN_FILE="$E2E_WORK_DIR/remote-to-local-plan.json"
 LOCAL_SERVER_SQL_MARKER="__e2e_null_server__"
 LOCAL_COMPOSE_ID="${E2E_LOCAL_COMPOSE_ID:-e2e-local-compose}"
 LOCAL_PLAN_FILE="$E2E_WORK_DIR/local-plan.json"
@@ -285,6 +286,59 @@ run_migrator_flow() {
   assert_resources_on_server "$SOURCE_SERVER_ID"
 }
 
+run_remote_to_local_migrator_flow() {
+  log "running Migrator CLI remote-to-local plan/apply/rollback"
+  local dsn="postgres://dokploy:${POSTGRES_PASSWORD}@127.0.0.1:${E2E_POSTGRES_PORT}/dokploy?sslmode=disable"
+  local common_env=(
+    "GOCACHE=$E2E_GO_CACHE"
+    "MIGRATOR_BASIC_USER=e2e"
+    "MIGRATOR_BASIC_PASSWORD=e2e"
+    "MIGRATOR_ADMIN_TOKEN=e2e-token"
+    "DOKPLOY_POSTGRES_DSN=$dsn"
+    "MIGRATOR_STATE_PATH=$E2E_WORK_DIR/migrator-state.sqlite"
+  )
+
+  env "${common_env[@]}" go run ./cmd/dokploy-migrator plan \
+    -source "$SOURCE_SERVER_ID" \
+    -target "$LOCAL_SERVER_ID" \
+    -out "$REMOTE_TO_LOCAL_PLAN_FILE"
+
+  local job_id
+  local schema_hash
+  local row_count
+  job_id="$(jq -r '.job.id' "$REMOTE_TO_LOCAL_PLAN_FILE")"
+  schema_hash="$(jq -r '.plan.schemaHash' "$REMOTE_TO_LOCAL_PLAN_FILE")"
+  row_count="$(jq -r '.plan.rows | length' "$REMOTE_TO_LOCAL_PLAN_FILE")"
+
+  if [ "$row_count" -lt 4 ]; then
+    jq . "$REMOTE_TO_LOCAL_PLAN_FILE"
+    printf 'expected at least 4 remote-to-local plan rows, got %s\n' "$row_count" >&2
+    exit 1
+  fi
+  if ! jq -e --arg local "$LOCAL_SERVER_ID" \
+    '.plan.targetServerId == $local and all(.plan.rows[]; .newServerId == $local)' \
+    "$REMOTE_TO_LOCAL_PLAN_FILE" >/dev/null; then
+    jq . "$REMOTE_TO_LOCAL_PLAN_FILE"
+    printf 'expected all remote-to-local plan rows to target %s\n' "$LOCAL_SERVER_ID" >&2
+    exit 1
+  fi
+
+  env "${common_env[@]}" go run ./cmd/dokploy-migrator apply \
+    -job "$job_id" \
+    -plan "$REMOTE_TO_LOCAL_PLAN_FILE" \
+    -schema-hash-approval "$schema_hash" \
+    -confirm APPLY
+
+  assert_resources_on_local_server
+
+  env "${common_env[@]}" go run ./cmd/dokploy-migrator rollback \
+    -job "$job_id" \
+    -plan "$REMOTE_TO_LOCAL_PLAN_FILE" \
+    -schema-hash-approval "$schema_hash"
+
+  assert_resources_on_server "$SOURCE_SERVER_ID"
+}
+
 run_local_migrator_flow() {
   log "running Migrator CLI local-server plan/apply/rollback"
   local dsn="postgres://dokploy:${POSTGRES_PASSWORD}@127.0.0.1:${E2E_POSTGRES_PORT}/dokploy?sslmode=disable"
@@ -361,6 +415,28 @@ SQL
   fi
 }
 
+assert_resources_on_local_server() {
+  log "verifying resources are on the main local Dokploy server"
+  local count
+  count="$(
+    psql_e2e -At <<'SQL'
+select count(*) from (
+  select "serverId" from "application" where "applicationId" = 'e2e-application' and "serverId" is null
+  union all
+  select "serverId" from "compose" where "composeId" = 'e2e-compose' and "serverId" is null
+  union all
+  select "serverId" from "postgres" where "postgresId" = 'e2e-postgres' and "serverId" is null
+  union all
+  select "serverId" from "redis" where "redisId" = 'e2e-redis' and "serverId" is null
+) x;
+SQL
+  )"
+  if [ "$count" != "4" ]; then
+    printf 'expected 4 resources on the main local Dokploy server, got %s\n' "$count" >&2
+    exit 1
+  fi
+}
+
 assert_local_compose_on_server() {
   local expected_server="$1"
   log "verifying local compose moved to $expected_server"
@@ -417,6 +493,7 @@ main() {
   wait_for_dokploy_schema
   seed_real_schema
   run_migrator_flow
+  run_remote_to_local_migrator_flow
   run_local_migrator_flow
   cleanup_test_helpers
   log "e2e passed"

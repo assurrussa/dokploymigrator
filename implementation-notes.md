@@ -8,6 +8,7 @@
 - v1 is implemented as a Go binary that can serve an embedded Web UI and expose CLI commands from the same code path.
 - Migrator state is kept separate from Dokploy in a local SQLite database.
 - Dokploy PostgreSQL write support is guarded by schema fingerprint checks and dry-run plans before updates.
+- The synthetic `__dokploy_local__` server is a symmetric source and target: it maps to `serverId IS NULL`, is always returned by the server scan even with zero resources, and uses the same reviewed dry-run, schema approval, transactional apply, and rollback path as explicit server IDs.
 - Direct restore is modeled through SSH plus Docker restore containers rather than direct writes into Docker internals.
 - S3 backup matching is manifest-first, with deterministic fallback candidates by resource name/type/time.
 
@@ -16,6 +17,7 @@
 - Exact Dokploy API endpoint names were not hardcoded beyond configurable health/deploy paths because current upstream docs could not be fetched through the local Context7 CLI runtime during planning.
 - SQLite as a Dokploy backend is intentionally not implemented for destructive writes in v1.
 - Metadata rollback is implemented for server/domain binding plans; restored volume/container cleanup is reported, not automatically removed.
+- Retargeting resources to the main local Dokploy server updates database metadata only; Docker containers, Swarm state, networks, and volumes still require operator verification and redeploy or repair outside Migrator.
 
 ## Validation Notes
 
