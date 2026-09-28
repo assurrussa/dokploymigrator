@@ -55,19 +55,18 @@ MIGRATOR_BASIC_USER=admin
 MIGRATOR_BASIC_PASSWORD=<strong-basic-auth-password>
 MIGRATOR_ADMIN_TOKEN=<strong-admin-token>
 DOKPLOY_POSTGRES_DSN=postgres://dokploy:<postgres-password>@dokploy-postgres:5432/dokploy?sslmode=disable
-MIGRATOR_HTTP_PORT=8080
 ```
 
 In Dokploy Domains, keep `Container Port` set to `8080`.
 
-`MIGRATOR_HTTP_PORT` controls only the optional host-published port. The app always listens inside the container on `8080`.
+The main Compose file and the Dokploy template publish no host port. Access the app through its Dokploy HTTPS domain; the app listens inside the container on `8080`. Existing Dokploy port mappings must also be removed when redeploying.
 
 The container refuses to start without Basic Auth credentials and an admin token.
 
 Health check:
 
 ```sh
-curl -fsS -u "$MIGRATOR_BASIC_USER:$MIGRATOR_BASIC_PASSWORD" http://127.0.0.1:8080/api/health
+docker compose exec dokploy-migrator sh -c 'curl -fsS -u "$MIGRATOR_BASIC_USER:$MIGRATOR_BASIC_PASSWORD" http://127.0.0.1:8080/api/health'
 ```
 
 Expected:
@@ -126,6 +125,16 @@ DOKPLOY_DEPLOY_PATH=
 
 ## Development
 
+For local host access, explicitly add the loopback-only override:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+```
+
+`MIGRATOR_HTTP_PORT` selects the local host port (default `8080`); the binding
+is `127.0.0.1`, and the container port remains `8080`. Use only the main Compose
+file in Dokploy.
+
 Toolchain:
 
 - Go `1.26`
@@ -140,7 +149,7 @@ make test
 make lint
 make build
 docker compose config
-MIGRATOR_HTTP_PORT=8888 docker compose config
+MIGRATOR_HTTP_PORT=8888 docker compose -f docker-compose.yml -f docker-compose.local.yml config
 ```
 
 Heavy schema drift check:

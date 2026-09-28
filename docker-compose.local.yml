@@ -1,0 +1,5 @@
+# Opt in explicitly for local host access; Dokploy uses docker-compose.yml alone.
+services:
+  dokploy-migrator:
+    ports:
+      - "127.0.0.1:${MIGRATOR_HTTP_PORT:-8080}:8080"

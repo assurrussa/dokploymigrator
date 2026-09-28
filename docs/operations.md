@@ -281,3 +281,9 @@ docker inspect "$CID" --format '{{json .Config.Labels}}' | jq | grep -E 'rule|lo
 ```
 
 The load balancer server port should be `8080`.
+
+Production Compose publishes no host port. Access the service through the
+Dokploy HTTPS domain or run the health check inside the container. When
+redeploying an existing app, remove any separately configured Dokploy port
+mapping such as `8888:8080`. Local host access is an explicit opt-in through
+`docker-compose.local.yml`, bound to `127.0.0.1`.

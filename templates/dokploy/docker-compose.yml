@@ -17,8 +17,6 @@ services:
       DOKPLOY_DEPLOY_PATH: "${DOKPLOY_DEPLOY_PATH:-}"
     volumes:
       - dokploy-migrator-data:/data
-    ports:
-      - "${MIGRATOR_HTTP_PORT:-8080}:8080"
     expose:
       - "8080"
     healthcheck:

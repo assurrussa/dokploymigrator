@@ -24,3 +24,11 @@
 - Keep adding fixtures for each supported Dokploy schema version before enabling writes against it.
 - Use `go test ./...` as the baseline verification command.
 - Verified locally with `go test ./...`, `go test -race ./...`, `go vet ./...`, `go build ./cmd/dokploy-migrator`, and an authenticated `/api/health` request against the built binary.
+
+## 2026-09-29 - Compose port publishing
+
+- The main Compose file and Dokploy template no longer publish the HTTP port
+  on the host. Dokploy routes to container port `8080` through its HTTPS domain.
+- Local host access requires the explicit `docker-compose.local.yml` override;
+  `MIGRATOR_HTTP_PORT` applies only there and binds to `127.0.0.1`.
+- Existing Dokploy UI port mappings must be removed at deployment as well.

@@ -23,8 +23,6 @@ services:
       MIGRATOR_SCHEMA_ALLOWLIST: "${MIGRATOR_SCHEMA_ALLOWLIST:-}"
     volumes:
       - dokploy-migrator-data:/data
-    ports:
-      - "${MIGRATOR_HTTP_PORT:-8080}:8080"
     expose:
       - "8080"
     healthcheck:

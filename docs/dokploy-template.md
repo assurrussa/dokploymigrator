@@ -5,7 +5,7 @@ This project is not published as an official Dokploy template yet. The files in 
 ## Template Goals
 
 - One-click Dokploy app install.
-- Fixed internal container port `8080`.
+- Fixed internal container port `8080`, without host port publishing.
 - Persistent `/data` volume for Migrator job history.
 - Required Basic Auth and admin token variables.
 - Optional Dokploy API settings.
@@ -25,7 +25,6 @@ The template should deploy Migrator itself as a normal Dokploy Compose app. It m
 
 ## Optional Inputs
 
-- `MIGRATOR_HTTP_PORT`
 - `MIGRATOR_SCHEMA_ALLOWLIST`
 - `MIGRATOR_DEAD_AFTER`
 - `DOKPLOY_API_BASE_URL`
