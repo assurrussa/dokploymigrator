@@ -198,26 +198,83 @@ curl -fsS -X DELETE \
   "https://migrator.example.com/api/jobs/$JOB_ID"
 ```
 
-## API Apply Payload
+## API Plan: POST /api/plan
 
-For a dry-run that targets the main local Dokploy server, send
-`"targetServerId": "__dokploy_local__"` to `POST /api/plan`. The response keeps
-that marker in `plan.targetServerId` and each row's `newServerId`.
+Build a dry-run with `POST /api/plan`. This endpoint requires HTTP Basic Auth and `X-Migrator-Admin-Token`. Send
+`Content-Type: application/json` with the JSON body. It creates a job
+and stores the dry-run plan in Migrator history; it does not apply retargeting
+writes to the Dokploy database.
+
+Request body (replace the source ID with the reviewed server ID):
 
 ```json
 {
-  "jobId": "job-...",
+  "sourceServerId": "source-server-id",
+  "targetServerId": "__dokploy_local__",
+  "mode": "dead_recovery"
+}
+```
+
+`sourceServerId` and `targetServerId` select different servers. Either side may
+use `__dokploy_local__`: as a source it selects `serverId IS NULL`, and as a
+target it represents `serverId = NULL`. This marker is not a real `server` row.
+An omitted or empty `mode` defaults to `dead_recovery`; `planned_relocation`
+remains reserved for future distinct consistency behavior, not a live-migration
+guarantee.
+
+A successful response is HTTP 200 with `job` and `plan` objects. Keep `job.id`
+and the complete returned `plan` for review and later apply. The plan retains
+`targetServerId: "__dokploy_local__"` and the same marker in each row's
+`newServerId` when targeting the local server. This request does not take an
+apply payload or require `confirmationText` / `schemaHashApproval`.
+
+## API Apply: POST /api/apply
+
+Apply the reviewed dry-run with `POST /api/apply`, not the plan endpoint.
+This endpoint requires HTTP Basic Auth and `X-Migrator-Admin-Token`. Send
+`Content-Type: application/json` with the JSON body.
+
+The following JSON illustrates the request shape only. Do not send the
+placeholder values: use `job.id` and the complete `plan` returned by the dry-run.
+Keep all plan fields, selecting a nonempty subset of its original rows if needed;
+do not fabricate or alter rows, source, target, or schema hash.
+
+```json
+{
+  "jobId": "job-from-dry-run",
   "plan": {
-    "id": "plan-...",
-    "schemaHash": "...",
-    "rows": []
+    "id": "plan-from-dry-run",
+    "sourceServerId": "source-server-id",
+    "targetServerId": "__dokploy_local__",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "schemaHash": "schema-hash-from-dry-run",
+    "rows": [
+      {
+        "table": "application",
+        "idColumn": "applicationId",
+        "id": "application-id-from-dry-run",
+        "name": "application-name-from-dry-run",
+        "oldServerId": "source-server-id",
+        "newServerId": "__dokploy_local__"
+      }
+    ]
   },
-  "schemaHashApproval": "<same schema hash, or empty to use MIGRATOR_SCHEMA_ALLOWLIST>",
+  "schemaHashApproval": "schema-hash-from-dry-run",
   "confirmationText": "APPLY"
 }
 ```
 
-`confirmationText` must be exactly `APPLY`.
+`confirmationText` must be exactly `APPLY`. Set `schemaHashApproval` to the
+reviewed schema hash; leave it empty only when `MIGRATOR_SCHEMA_ALLOWLIST`
+already contains that hash. Stored-plan validation, schema drift checks,
+allowed tables/ID columns, and affected-row checks still apply. Retargeting
+writes run in one PostgreSQL transaction.
+
+A successful response is HTTP 200 with `{"status":"applied"}`. This changes
+Dokploy metadata only: it does not move containers, services, volumes, or data,
+and does not automatically redeploy resources. Verify and redeploy the affected
+resources in Dokploy after apply, with the manual Docker/Swarm checks described
+above.
 
 ## CLI Apply
 
